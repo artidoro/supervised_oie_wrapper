@@ -14,9 +14,10 @@ from collections import defaultdict
 from operator import itemgetter
 import functools
 import operator
+import spacy
 
 # Local imports
-from format_oie import format_extractions, Mock_token
+from . import format_oie
 #=-----
 
 def chunks(l, n):
@@ -26,18 +27,16 @@ def chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
 
-def create_instances(model, sent):
+def create_instances(tokenized_sent):
     """
     Convert a sentence into a list of instances.
     """
-    sent_tokens = model._tokenizer.tokenize(sent)
-
     # Find all verbs in the input sentence
-    pred_ids = [i for (i, t) in enumerate(sent_tokens)
+    pred_ids = [i for (i, t) in enumerate(tokenized_sent)
                 if t.pos_ == "VERB" or t.pos_ == "AUX"]
 
     # Create instances
-    instances = [{"sentence": sent_tokens,
+    instances = [{"sentence": tokenized_sent,
                   "predicate_index": pred_id}
                  for pred_id in pred_ids]
 
@@ -58,9 +57,10 @@ def get_confidence(model, tag_per_token, class_probs):
 
     return prod_prob
 
-def run_oie(lines, batch_size=64, cuda_device=-1, debug=False):
+def run_oie(tokenized_sentences, batch_size=1, cuda_device=-1, debug=False):
     """
     Run the OIE model and process the output.
+    nlp is a spacy model.
     """
 
     if debug:
@@ -78,17 +78,21 @@ def run_oie(lines, batch_size=64, cuda_device=-1, debug=False):
     # process sentences
     logging.info("Processing sentences")
     oie_lines = []
-    for chunk in tqdm(chunks(lines, batch_size)):
+    for chunk in tqdm(chunks(tokenized_sentences, batch_size)):
         oie_inputs = []
         for sent in chunk:
-            oie_inputs.extend(create_instances(model, sent))
+            oie_inputs.extend(create_instances(sent))
         if not oie_inputs:
             # No predicates in this sentence
             continue
 
+        for sent in chunk:
+            for token in sent:
+                print(token, token.i)
+
         # Run oie on sents
         sent_preds = model.predict_batch_json(oie_inputs)
-
+        print('ran model')
         # Collect outputs in batches
         predictions_by_sent = defaultdict(list)
         for outputs in sent_preds:
@@ -99,7 +103,7 @@ def run_oie(lines, batch_size=64, cuda_device=-1, debug=False):
             predictions_by_sent[sent_str].append((outputs["tags"], outputs["class_probabilities"]))
 
         # Create extractions by sentence
-        for sent_tokens, predictions_for_sent in predictions_by_sent.items():
+        for sent_idx, (sent, predictions_for_sent) in enumerate(predictions_by_sent.items()):
             raw_tags = list(map(itemgetter(0), predictions_for_sent))
             class_probs = list(map(itemgetter(1), predictions_for_sent))
 
@@ -107,11 +111,16 @@ def run_oie(lines, batch_size=64, cuda_device=-1, debug=False):
             confs = [get_confidence(model, tag_per_token, class_prob)
                      for tag_per_token, class_prob in zip(raw_tags, class_probs)]
 
-            extractions, tags = format_extractions([Mock_token(tok) for tok in sent_tokens.split(" ")], raw_tags)
-
-            oie_lines.extend([extraction + f"\t{conf}" for extraction, conf in zip(extractions, confs)])
+            frames = format_oie.format_extractions(chunk[sent_idx], raw_tags)
+            # for conf, frame in zip(confs, frames):
+            #     frame['confidence'] = conf
+            oie_lines.append(frames)
     logging.info("DONE")
     return oie_lines
+
+
+
+
 
 if __name__ == "__main__":
     # Parse command line arguments

@@ -29,21 +29,27 @@ class Mock_token:
     def __str__(self):
         return self.text
 
-def get_oie_frame(tokens, tags) -> str:
+def get_oie_frame(tokens, tags):
     """
     Converts a list of model outputs (i.e., a list of lists of bio tags, each
     pertaining to a single word), returns an inline bracket representation of
     the prediction.
     """
     frame = defaultdict(list)
-    chunk = []
-    words = [token.text for token in tokens]
+    doc = tokens[0].doc
 
-    for (token, tag) in zip(words, tags):
+    for (token, tag) in zip(tokens, tags):
         if tag.startswith("I-") or tag.startswith("B-"):
             frame[tag[2:]].append(token)
 
-    return dict(frame)
+    frame = dict(frame)
+    for key in frame.keys():
+        tokens = frame[key]
+        print('tokens: ', tokens[0], tokens[-1], ' tokens')
+        print('index: ', tokens[0].i, tokens[-1].i, ' index')
+        assert tokens[0].i + len(tokens) == tokens[-1].i + 1, 'not contiguous'
+        frame[key] = doc[tokens[0].i:tokens[-1].i + 1]
+    return frame
 
 
 def get_frame_str(oie_frame) -> str:
@@ -72,24 +78,21 @@ def format_extractions(sent_tokens, sent_predictions):
     # Consolidate predictions
     if not (len(set(map(len, sent_predictions))) == 1):
         raise AssertionError
+    print(sent_predictions)
+    print(len(sent_tokens), len(sent_predictions[0]))
     assert len(sent_tokens) == len(sent_predictions[0])
-    sent_str = " ".join(map(str, sent_tokens))
 
     pred_dict = consolidate_predictions(sent_predictions, sent_tokens)
 
     # Build and return output dictionary
-    results = []
-    all_tags = []
+    frames = []
 
     for tags in pred_dict.values():
         # Join multi-word predicates
         tags = join_mwp(tags)
-        all_tags.append(tags)
 
         # Create description text
         oie_frame = get_oie_frame(sent_tokens, tags)
+        frames.append(oie_frame)
 
-        # Add a predicate prediction to outputs.
-        results.append("\t".join([sent_str, get_frame_str(oie_frame)]))
-
-    return results, all_tags
+    return frames
