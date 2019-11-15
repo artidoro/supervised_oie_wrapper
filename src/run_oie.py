@@ -86,13 +86,8 @@ def run_oie(tokenized_sentences, batch_size=1, cuda_device=-1, debug=False):
             # No predicates in this sentence
             continue
 
-        for sent in chunk:
-            for token in sent:
-                print(token, token.i)
-
         # Run oie on sents
         sent_preds = model.predict_batch_json(oie_inputs)
-        print('ran model')
         # Collect outputs in batches
         predictions_by_sent = defaultdict(list)
         for outputs in sent_preds:

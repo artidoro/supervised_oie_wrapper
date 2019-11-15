@@ -45,8 +45,6 @@ def get_oie_frame(tokens, tags):
     frame = dict(frame)
     for key in frame.keys():
         tokens = frame[key]
-        print('tokens: ', tokens[0], tokens[-1], ' tokens')
-        print('index: ', tokens[0].i, tokens[-1].i, ' index')
         assert tokens[0].i + len(tokens) == tokens[-1].i + 1, 'not contiguous'
         frame[key] = doc[tokens[0].i:tokens[-1].i + 1]
     return frame
@@ -78,8 +76,6 @@ def format_extractions(sent_tokens, sent_predictions):
     # Consolidate predictions
     if not (len(set(map(len, sent_predictions))) == 1):
         raise AssertionError
-    print(sent_predictions)
-    print(len(sent_tokens), len(sent_predictions[0]))
     assert len(sent_tokens) == len(sent_predictions[0])
 
     pred_dict = consolidate_predictions(sent_predictions, sent_tokens)
